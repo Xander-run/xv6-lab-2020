@@ -273,6 +273,7 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+  np->trace_mask = p->trace_mask;  // copy the trace mask to child proc
   np->sz = p->sz;
 
   np->parent = p;
