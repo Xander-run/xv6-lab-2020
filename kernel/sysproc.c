@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -106,5 +107,13 @@ sys_trace(void)
         return -1;
     }
     myproc()->trace_mask = trace_mask;
+    return 0;
+}
+
+
+uint64
+sys_sysinfo(void)
+{
+    // TODO: here read the bullshit about copy to user space
     return 0;
 }

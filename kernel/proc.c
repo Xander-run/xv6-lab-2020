@@ -694,3 +694,16 @@ procdump(void)
     printf("\n");
   }
 }
+
+
+// get unused proc num
+int
+proc_num(void) {
+    int num = 0;
+    for (int i = 0; i < NPROC; i++) {
+        if (proc[i].procstate == UNUSED) {
+            num++;
+        }
+    }
+    return num;
+}
