@@ -697,11 +697,12 @@ procdump(void)
 
 
 // get unused proc num
-int
+uint64
 proc_num(void) {
-    int num = 0;
+    uint64 num = 0;
+    struct proc *p = proc;
     for (int i = 0; i < NPROC; i++) {
-        if (proc[i].procstate == UNUSED) {
+        if (p[i].state != UNUSED) {
             num++;
         }
     }

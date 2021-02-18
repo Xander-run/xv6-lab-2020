@@ -114,6 +114,20 @@ sys_trace(void)
 uint64
 sys_sysinfo(void)
 {
-    // TODO: here read the bullshit about copy to user space
+    uint64 addr;
+
+    if (argaddr(0, &addr) < 0) {
+        return -1;
+    }
+
+    struct proc *p = myproc();
+    struct sysinfo info;
+    info.nproc = proc_num();
+    info.freemem = free_mem_size();
+
+    if (copyout(p->pagetable, addr, (char*)&info, sizeof(info)) < 0) {
+        return -1;
+    }
+
     return 0;
 }

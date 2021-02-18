@@ -81,11 +81,11 @@ kalloc(void)
   return (void*)r;
 }
 
-int free_mem_zie(void) {
+uint64 free_mem_size(void) {
     struct run *it;
     int size = 0;
-    for (it = kmem.freelist; it ; it = it.next) {
-        size += PAGE_SIZE;
+    for (it = kmem.freelist; it ; it = it->next) {
+        size += PGSIZE;
     }
     return size;
 }
