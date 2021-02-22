@@ -455,7 +455,7 @@ static void recursively_print(pagetable_t pagetable, uint64 level) {
                 printf(" ..");
             }
 
-            printf("%d: pte %p pa %p\n",level, entry, ppn);
+            printf("%d: pte %p pa %p\n",i, entry, ppn);
 
             if (level == max_level) {
                 continue;
