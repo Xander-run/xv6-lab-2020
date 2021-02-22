@@ -441,6 +441,32 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   }
 }
 
-void vmprint(pagetable_t pagetable) {
 
+static void recursively_print(pagetable_t pagetable, uint64 level) {
+    int max_level = 2;
+
+    for (int i = 0; i < 512; i++) {
+        pte_t entry = pagetable[i];
+        uint64 ppn = PTE2PA(entry);
+
+        if (entry & PTE_V) {
+            printf("..");
+            for (int i = 0; i < level; i++) {
+                printf(" ..");
+            }
+
+            printf("%d: pte %p pa %p\n",level, entry, ppn);
+
+            if (level == max_level) {
+                continue;
+            } else {
+                recursively_print((pagetable_t)ppn, level + 1);
+            }
+        }
+    }
+}
+
+void vmprint(pagetable_t pagetable) {
+    printf("page table %p\n", pagetable);
+    recursively_print(pagetable, 0);
 }
