@@ -77,8 +77,17 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
-    yield();
+  if(which_dev == 2) {
+      if ((p->max_ticks > 0) && p->handler) {
+          p->current_ticks += 1;
+          if (p->current_ticks >= p->max_ticks) {
+              p->current_ticks = 0;
+              // todo: save current trapframe
+              p->trapframe->epc = (uint64)(p->handler);
+          }
+      }
+      yield();
+  }
 
   usertrapret();
 }
