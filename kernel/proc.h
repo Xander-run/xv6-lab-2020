@@ -106,4 +106,6 @@ struct proc {
   void (*handler)();
   int max_ticks;
   int current_ticks; // memset to 0 in proc_alloc, so no worry here
+  struct trapframe *temp_trapframe;
+  int in_alarm_handler;
 };

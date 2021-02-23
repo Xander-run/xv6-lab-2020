@@ -112,11 +112,15 @@ uint64 sys_sigalarm(void) {
     }
 
     p->max_ticks = ticks;
+    p->current_ticks = 0;
     p->handler = (void(*)())handler;
     return 0;
 }
 
-// todo :here, resume contex from proc
+
 uint64 sys_sigreturn(void) {
+    struct proc *p = myproc();
+    p->in_alarm_handler = 0;
+    switch_trap_frame(p->temp_trapframe, p->trapframe);
     return 0;
 }

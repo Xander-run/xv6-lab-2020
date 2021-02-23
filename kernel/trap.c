@@ -78,11 +78,12 @@ usertrap(void)
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2) {
-      if ((p->max_ticks > 0) && p->handler) {
+      if ((p->max_ticks > 0) && p->handler && !(p->in_alarm_handler)) {
           p->current_ticks += 1;
           if (p->current_ticks >= p->max_ticks) {
+              p->in_alarm_handler = 1;
               p->current_ticks = 0;
-              // todo: save current trapframe
+              switch_trap_frame(p->trapframe, p->temp_trapframe);
               p->trapframe->epc = (uint64)(p->handler);
           }
       }
@@ -225,5 +226,49 @@ devintr()
   } else {
     return 0;
   }
+}
+
+void switch_trap_frame(struct trapframe *src, struct trapframe *dest) {
+    dest->kernel_satp = src->kernel_satp;
+    dest->kernel_sp = src->kernel_sp;
+    dest->kernel_trap = src->kernel_trap;
+    dest->kernel_hartid = src->kernel_hartid;
+
+
+    dest->epc = src->epc;
+    dest->ra = src->ra;
+    dest->sp = src->sp;
+    dest->gp = src->gp;
+    dest->tp = src->tp;
+
+    dest->s0 = src->s0;
+    dest->s1 = src->s1;
+    dest->s2 = src->s2;
+    dest->s3 = src->s3;
+    dest->s4 = src->s4;
+    dest->s5 = src->s5;
+    dest->s6 = src->s6;
+    dest->s7 = src->s7;
+    dest->s8 = src->s8;
+    dest->s9 = src->s9;
+    dest->s10 = src->s10;
+    dest->s11 = src->s11;
+
+    dest->t0 = src->t0;
+    dest->t1 = src->t1;
+    dest->t2 = src->t2;
+    dest->t3 = src->t3;
+    dest->t4 = src->t4;
+    dest->t5 = src->t5;
+    dest->t6 = src->t6;
+
+    dest->a0 = src->a0;
+    dest->a1 = src->a1;
+    dest->a2 = src->a2;
+    dest->a3 = src->a3;
+    dest->a4 = src->a4;
+    dest->a5 = src->a5;
+    dest->a6 = src->a6;
+    dest->a7 = src->a7;
 }
 
