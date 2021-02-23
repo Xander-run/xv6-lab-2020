@@ -78,8 +78,9 @@ usertrap(void)
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2) {
-      if ((p->max_ticks > 0) && p->handler && !(p->in_alarm_handler)) {
-          p->current_ticks += 1;
+      p->current_ticks += 1;
+      // todo: why can't &&(p->handler)?
+      if ((p->max_ticks > 0) && !(p->in_alarm_handler)) {
           if (p->current_ticks >= p->max_ticks) {
               p->in_alarm_handler = 1;
               p->current_ticks = 0;
