@@ -5,6 +5,9 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
+
 
 /*
  * the kernel's page table.
@@ -91,20 +94,42 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
 // Look up a virtual address, return the physical address,
 // or 0 if not mapped.
 // Can only be used to look up user pages.
+// todo:
 uint64
 walkaddr(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
   uint64 pa;
-
+  struct proc *p = myproc();
   if(va >= MAXVA)
     return 0;
 
   pte = walk(pagetable, va, 0);
-  if(pte == 0)
-    return 0;
-  if((*pte & PTE_V) == 0)
-    return 0;
+
+  if ((pte == 0) || (*pte & PTE_V) == 0) {
+      pagetable_t pgt = pagetable;
+      uint64 fault_addr = va;
+      uint64 v_addr = PGROUNDDOWN(fault_addr);
+
+      if (v_addr >= p->sz) {
+          return 0;
+      }
+
+      if (v_addr <= PGROUNDDOWN(p->trapframe->sp)) {
+          return 0;
+      }
+
+      char *p_addr = kalloc();
+      if (p_addr == 0) {
+          return 0;
+      }
+      memset(p_addr, 0, PGSIZE);  // filled with trash
+
+      if (mappages(pgt, v_addr, PGSIZE, (uint64)p_addr, PTE_W|PTE_X|PTE_R|PTE_U) != 0) {
+          kfree(p_addr);
+          return 0;
+      }
+  }
   if((*pte & PTE_U) == 0)
     return 0;
   pa = PTE2PA(*pte);
@@ -181,13 +206,12 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0)
-      panic("uvmunmap: walk");
+        continue;
+//      panic("uvmunmap: walk");
     if ((*pte & PTE_V) == 0) {
-        *pte = 0;
         continue;
     }
 //      panic("uvmunmap: not mapped");
-// todo: here
 
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
@@ -198,6 +222,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     *pte = 0;
   }
 }
+
 
 // create an empty user page table.
 // returns 0 if out of memory.
@@ -321,9 +346,11 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
+        continue;
+      // panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+        continue;
+      // panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
@@ -340,6 +367,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
 }
+
 
 // mark a PTE invalid for user access.
 // used by exec for the user stack guard page.

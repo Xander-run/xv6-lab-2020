@@ -70,9 +70,27 @@ usertrap(void)
       pagetable_t pgt = p->pagetable;
       uint64 fault_addr = r_stval();
       uint64 v_addr = PGROUNDDOWN(fault_addr);
+
+      if (v_addr >= p->sz) {
+          printf("usertrap(): access illegal memory %p pid=%d\n", fault_addr, p->pid);
+          printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+          p->killed = 1;
+          goto done;
+      }
+
+      if (v_addr <= PGROUNDDOWN(p->trapframe->sp)) {
+          printf("usertrap(): access illegal memory %p at guardpage, pid=%d\n", fault_addr, p->pid);
+          printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+          p->killed = 1;
+          goto done;
+      }
+
       char *p_addr = kalloc();
       if (p_addr == 0) {
-          // todo: memory cant be alloc
+          printf("usertrap(): cant allocate memory pid=%d\n", p->pid);
+          printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+          p->killed = 1;
+          goto done;
       }
       memset(p_addr, 0, PGSIZE);  // filled with trash
 
@@ -88,8 +106,9 @@ usertrap(void)
         p->killed = 1;
     }
 
-  if(p->killed)
-    exit(-1);
+    done:
+    if(p->killed)
+        exit(-1);
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
