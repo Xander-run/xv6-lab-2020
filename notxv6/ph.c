@@ -8,6 +8,8 @@
 #define NBUCKET 5
 #define NKEYS 100000
 
+pthread_mutex_t global_locks[NBUCKET];            // declare a lock
+
 struct entry {
   int key;
   int value;
@@ -28,18 +30,18 @@ now()
 static void 
 insert(int key, int value, struct entry **p, struct entry *n)
 {
-  struct entry *e = malloc(sizeof(struct entry));
-  e->key = key;
-  e->value = value;
-  e->next = n;
-  *p = e;
+    struct entry *e = malloc(sizeof(struct entry));
+    e->key = key;
+    e->value = value;
+    e->next = n;
+    *p = e;
 }
 
 static 
 void put(int key, int value)
 {
-  int i = key % NBUCKET;
-
+    int i = key % NBUCKET;
+    pthread_mutex_lock(&(global_locks[i]));       // acquire lock
   // is the key already present?
   struct entry *e = 0;
   for (e = table[i]; e != 0; e = e->next) {
@@ -53,11 +55,13 @@ void put(int key, int value)
     // the new is new.
     insert(key, value, &table[i], table[i]);
   }
+    pthread_mutex_unlock(&(global_locks[i]));     // release lock
 }
 
 static struct entry*
 get(int key)
 {
+    // todo: cant get while do put, so i think it needs rwlock here
   int i = key % NBUCKET;
 
 
@@ -102,8 +106,10 @@ main(int argc, char *argv[])
   pthread_t *tha;
   void *value;
   double t1, t0;
-
-  if (argc < 2) {
+  for (int i = 0; i < NBUCKET; i++) {
+      pthread_mutex_init(&global_locks[i], NULL); // initialize the lock
+  }
+    if (argc < 2) {
     fprintf(stderr, "Usage: %s nthreads\n", argv[0]);
     exit(-1);
   }
