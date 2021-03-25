@@ -30,7 +30,20 @@ barrier()
   // Block until all threads have called barrier() and
   // then increment bstate.round.
   //
-  
+  pthread_mutex_lock(&bstate.barrier_mutex);
+  bstate.nthread++;
+
+  if (bstate.nthread < nthread) {
+      pthread_cond_wait(&bstate.barrier_cond, &bstate.barrier_mutex);
+      pthread_mutex_unlock(&bstate.barrier_mutex);
+  } else {
+      bstate.nthread = 0;
+      bstate.round += 1;
+      pthread_cond_broadcast(&bstate.barrier_cond);
+      pthread_mutex_unlock(&bstate.barrier_mutex);
+      // https://stackoverflow.com/questions/6419117/signal-and-unlock-order
+      // unlock->signal/ signal->unlock, both order is ok, and also will introduce some problem, see the article above
+  }
 }
 
 static void *
