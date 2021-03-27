@@ -13,6 +13,8 @@ void freerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
+int reference_bits[PHYSTOP / PGSIZE];  // todo: set a lock here, deadlock issue
+struct spinlock reference_bit_lock;
 
 struct run {
   struct run *next;
@@ -27,6 +29,7 @@ void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&reference_bit_lock, "refer");
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -36,7 +39,7 @@ freerange(void *pa_start, void *pa_end)
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
-    kfree(p);
+    kfree(p);  // todo: maybe here?
 }
 
 // Free the page of physical memory pointed at by v,
@@ -46,6 +49,14 @@ freerange(void *pa_start, void *pa_end)
 void
 kfree(void *pa)
 {
+    // acquire(&reference_bit_lock);
+    if (reference_bits[(uint64)pa / (uint64)PGSIZE] > 1) {
+        reference_bits[(uint64)pa / (uint64)PGSIZE] -= 1;
+        return;
+    }
+
+    reference_bits[(uint64)pa / PGSIZE] = 0;
+    // release(&reference_bit_lock);
   struct run *r;
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
@@ -68,6 +79,7 @@ kfree(void *pa)
 void *
 kalloc(void)
 {
+
   struct run *r;
 
   acquire(&kmem.lock);
@@ -76,7 +88,17 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
+  // set the reference bit of the allocated page to one
+  // acquire(&reference_bit_lock);
+  reference_bits[(uint64)r / (uint64)PGSIZE] = 1;
+  // release(&reference_bit_lock);
+
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+int
+reference_num(uint64 pa) {
+    return reference_bits[pa / PGSIZE];
 }

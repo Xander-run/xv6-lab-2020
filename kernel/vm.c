@@ -14,6 +14,8 @@ pagetable_t kernel_pagetable;
 extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
+extern int reference_bits[];
+extern struct spinlock reference_bit_lock;
 
 /*
  * create a direct-map page table for the kernel.
@@ -131,7 +133,7 @@ kvmpa(uint64 va)
   uint64 off = va % PGSIZE;
   pte_t *pte;
   uint64 pa;
-  
+
   pte = walk(kernel_pagetable, va, 0);
   if(pte == 0)
     panic("kvmpa");
@@ -148,23 +150,23 @@ kvmpa(uint64 va)
 int
 mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 {
-  uint64 a, last;
-  pte_t *pte;
+    uint64 a, last;
+    pte_t *pte;
 
-  a = PGROUNDDOWN(va);
-  last = PGROUNDDOWN(va + size - 1);
-  for(;;){
-    if((pte = walk(pagetable, a, 1)) == 0)
-      return -1;
-    if(*pte & PTE_V)
-      panic("remap");
-    *pte = PA2PTE(pa) | perm | PTE_V;
-    if(a == last)
-      break;
-    a += PGSIZE;
-    pa += PGSIZE;
-  }
-  return 0;
+    a = PGROUNDDOWN(va);
+    last = PGROUNDDOWN(va + size - 1);
+    for(;;){
+        if((pte = walk(pagetable, a, 1)) == 0)
+            return -1;
+        if(*pte & PTE_V)
+            panic("remap");
+        *pte = PA2PTE(pa) | perm | PTE_V;
+        if(a == last)
+            break;
+        a += PGSIZE;
+        pa += PGSIZE;
+    }
+    return 0;
 }
 
 // Remove npages of mappings starting from va. va must be
@@ -311,7 +313,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+//  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -320,18 +322,25 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      goto err;
+    // disable write bit of pte
+    if ((flags & PTE_W) != 0) {  // todo: if (flags & PTE_W)?????????
+        flags = (flags & (~PTE_W)) | PTE_RSW;
+        *pte = ((*pte) & (~PTE_W)) | PTE_RSW;
     }
+
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+        // kfree(mem);
+        goto err;
+    }
+    reference_bits[pa / (uint64)PGSIZE] += 1;
+//    if((mem = kalloc()) == 0)
+//      goto err;
+//    memmove(mem, (char*)pa, PGSIZE);
   }
   return 0;
 
  err:
-  uvmunmap(new, 0, i / PGSIZE, 1);
+  // uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
 }
 
@@ -341,7 +350,7 @@ void
 uvmclear(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
-  
+
   pte = walk(pagetable, va, 0);
   if(pte == 0)
     panic("uvmclear");
@@ -354,13 +363,26 @@ uvmclear(pagetable_t pagetable, uint64 va)
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
-  uint64 n, va0, pa0;
+  uint64 n, va0, pa0, old_pa;
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
-      return -1;
+    old_pa = pa0;
+    pte_t *pte;
+    pte = walk(pagetable, va0, 0);
+    if ((*pte & PTE_RSW) != 0) { // RSW
+        pa0 = (uint64)kalloc();
+        if (pa0 == 0) {
+            return -1;
+        }
+        memmove((void*)pa0, (void*)old_pa, PGSIZE);
+        mappages(pagetable, va0, PGSIZE, pa0, PTE_W|PTE_R|PTE_X|PTE_U);
+        reference_bits[pa0 / (uint64)PGSIZE] += 1;
+        *pte = *pte & (~PTE_RSW); // todo:
+    }
+//    if(pa0 == 0)
+//      return -1;
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
@@ -372,6 +394,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   }
   return 0;
 }
+
 
 // Copy from user to kernel.
 // Copy len bytes to dst from virtual address srcva in a given page table.

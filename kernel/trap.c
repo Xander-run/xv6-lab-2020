@@ -10,6 +10,7 @@ struct spinlock tickslock;
 uint ticks;
 
 extern char trampoline[], uservec[], userret[];
+extern int reference_bits[];
 
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
@@ -65,6 +66,51 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if (r_scause() == 13 || r_scause() == 15) {
+      // page_fault
+      // 1. check if is illegal access
+      // 2. calloc physical page and copy the content
+      // 3. update pgt entry of parent and child and the reference array(not need here, do this in mappages)
+      uint64 addr = r_stval();
+      if (addr > p->sz || addr > MAXVA) {
+          printf("usertrap(): illegal access pid=%d\n", p->pid);
+          printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+          p->killed = 1;
+          goto done;
+      }
+
+      if (addr <= PGROUNDDOWN(p->trapframe->sp)) {
+          printf("usertrap(): access illegal memory %p at guardpage, pid=%d\n", addr, p->pid);
+          printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+          p->killed = 1;
+          goto done;
+      }
+
+      pte_t *old_pte;
+      old_pte = walk(p->pagetable, addr, 0);
+      uint64 old_pa = PTE2PA(*old_pte);
+      if (reference_num(old_pa) == 1) {
+          // only update the pte
+          *old_pte = ((*old_pte) & (~PTE_RSW)) | (PTE_W);
+          goto done;
+      }
+
+      void *new_pa = kalloc();
+      if (new_pa == 0) {
+          // no available physical page, kill the proc
+          printf("usertrap(): no available memory for cow pid=%d\n", p->pid);
+          printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+          p->killed = 1;
+          goto done;
+      }
+
+      pagetable_t old_pgt = p->pagetable;
+      memmove(new_pa, (char*)old_pa, PGSIZE);
+      mappages(old_pgt, addr, PGSIZE, (uint64)new_pa, PTE_W|PTE_R|PTE_X|PTE_U);
+      // todo: old reference -1
+      reference_bits[old_pa / (uint64)PGSIZE] -= 1;
+      // *old_pte = (*old_pte & (~PTE_RSW)) | (PTE_W);
+      *old_pte = (*old_pte) & (~PTE_RSW);
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
@@ -73,6 +119,7 @@ usertrap(void)
     p->killed = 1;
   }
 
+  done:
   if(p->killed)
     exit(-1);
 

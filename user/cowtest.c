@@ -82,7 +82,7 @@ threetest()
       }
       for(char *q = p; q < p + (sz/5)*4; q += 4096){
         if(*(int*)q != getpid()){
-          printf("wrong content\n");
+          printf("wrong content first\n");
           exit(-1);
         }
       }
@@ -104,7 +104,7 @@ threetest()
 
   for(char *q = p; q < p + sz; q += 4096){
     if(*(int*)q != getpid()){
-      printf("wrong content\n");
+      printf("wrong content second\n");
       exit(-1);
     }
   }
@@ -186,8 +186,12 @@ main(int argc, char *argv[])
   simpletest();
 
   threetest();
+  printf("passed 1 thretest\n");
   threetest();
+  printf("passed 2 thretest\n");
   threetest();
+  printf("passed 3 thretest\n");
+
 
   filetest();
 
