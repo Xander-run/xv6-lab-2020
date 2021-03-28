@@ -14,8 +14,8 @@ pagetable_t kernel_pagetable;
 extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
-extern int reference_bits[];
-extern struct spinlock reference_bit_lock;
+// extern int reference_bits[];
+// extern struct spinlock reference_bit_lock;
 
 /*
  * create a direct-map page table for the kernel.
@@ -333,7 +333,8 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
         // kfree(mem);
         goto err;
     }
-    reference_bits[pa / (uint64)PGSIZE] += 1;
+    // reference_bits[pa / (uint64)PGSIZE] += 1;
+    increase_rc((void*)pa);
     // 之后这里需要将reference count +1, 其他the kalloc of other cow will set the reference bit to 1
 //    if((mem = kalloc()) == 0)
 //      goto err;
@@ -384,7 +385,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
         // mappages(pagetable, va0, PGSIZE, pa0, PTE_W|PTE_R|PTE_X|PTE_U);
         // reference_bits[pa0 / (uint64)PGSIZE] += 1;
         kfree((void*)old_pa);
-        *pte = PTE2PA(*pte) | flag; // todo:
+        *pte = PA2PTE(pa0) | flag;
     }
 //    if(pa0 == 0)
 //      return -1;

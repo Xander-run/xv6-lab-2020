@@ -10,7 +10,7 @@ struct spinlock tickslock;
 uint ticks;
 
 extern char trampoline[], uservec[], userret[];
-extern int reference_bits[];
+// extern int reference_bits[];
 
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
@@ -48,10 +48,10 @@ usertrap(void)
   w_stvec((uint64)kernelvec);
 
   struct proc *p = myproc();
-  
+
   // save user program counter.
   p->trapframe->epc = r_sepc();
-  
+
   if(r_scause() == 8){
     // system call
 
@@ -91,11 +91,13 @@ usertrap(void)
       pte = walk(p->pagetable, addr, 0);
       uint flag = PTE_FLAGS(*pte);
       uint64 old_pa = PTE2PA(*pte);
-      if (reference_num(old_pa) == 1) {
-          // only update the pte
-          *pte = ((*pte) & (~PTE_RSW)) | (PTE_W);
-          goto done;
-      }
+      // todo: problem here
+//      if (get_rc((void*)old_pa) == 1) {
+//          // only update the pte
+//          flag = (flag & ~PTE_RSW) | PTE_W;
+//          *pte = (PA2PTE(old_pa) & (~PTE_RSW)) | flag;
+//          goto done;
+//      }
 
       void *new_pa = kalloc();
       if (new_pa == 0) {
@@ -132,6 +134,96 @@ usertrap(void)
 
   usertrapret();
 }
+//int
+//cow_alloc(pagetable_t pagetable, uint64 va)
+//{
+//    uint64 pa;
+//    pte_t *pte;
+//    uint flags;
+//
+//    if (va >= MAXVA) return -1;
+//
+//    va = PGROUNDDOWN(va);
+//    pte = walk(pagetable, va, 0);
+//    if (pte == 0) return -1;
+//
+//    pa = PTE2PA(*pte);
+//    if (pa == 0) return -1;
+//
+//    flags = PTE_FLAGS(*pte);
+//
+//    if (flags & PTE_RSW)
+//    {
+//        char *ka = kalloc();
+//        if (ka == 0) return -1;
+//        memmove(ka, (char*)pa, PGSIZE);
+//        kfree((void*)pa);
+//        flags = (flags & ~PTE_RSW) | PTE_W;
+//        *pte = PA2PTE((uint64)ka) | flags;
+//        return 0;
+//    }
+//
+//    return 0;
+//}
+//
+//void
+//usertrap(void)
+//{
+//    int which_dev = 0;
+//
+//    if((r_sstatus() & SSTATUS_SPP) != 0)
+//        panic("usertrap: not from user mode");
+//
+//    // send interrupts and exceptions to kerneltrap(),
+//    // since we're now in the kernel.
+//    w_stvec((uint64)kernelvec);
+//
+//    struct proc *p = myproc();
+//
+//    // save user program counter.
+//    p->trapframe->epc = r_sepc();
+//
+//    if(r_scause() == 8){
+//        // system call
+//
+//        if(p->killed)
+//            exit(-1);
+//
+//        // sepc points to the ecall instruction,
+//        // but we want to return to the next instruction.
+//        p->trapframe->epc += 4;
+//
+//        // an interrupt will change sstatus &c registers,
+//        // so don't enable until done with those registers.
+//        intr_on();
+//
+//        syscall();
+//    } else if((which_dev = devintr()) != 0){
+//        // ok
+//    } else if (r_scause() == 13 || r_scause() == 15){
+//        uint64 va = r_stval();
+//        // 超过最大地址或者在gurad page中报错
+//        if (va >= MAXVA || (va <= PGROUNDDOWN(p->trapframe->sp) && va >= PGROUNDDOWN(p->trapframe->sp) - PGSIZE))
+//        {
+//            p->killed = 1;
+//        }
+//        else if (cow_alloc(p->pagetable, va) != 0)
+//            p->killed = 1;
+//    }
+//    else{
+//        p->killed = 1;
+//    }
+//
+//    if(p->killed)
+//        exit(-1);
+//
+//    // give up the CPU if this is a timer interrupt.
+//    if(which_dev == 2)
+//        yield();
+//
+//    usertrapret();
+//}
+
 
 //
 // return to user space
