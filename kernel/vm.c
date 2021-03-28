@@ -160,6 +160,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
             return -1;
         if(*pte & PTE_V)
             panic("remap");
+            // continue;
         *pte = PA2PTE(pa) | perm | PTE_V;
         if(a == last)
             break;
@@ -323,9 +324,9 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     // disable write bit of pte
-    if ((flags & PTE_W) != 0) {  // todo: if (flags & PTE_W)?????????
+    if ((flags & PTE_W) != 0) {  // todo: == buhui remap? wocao 只要进入if后面的语句就会说我remap？
         flags = (flags & (~PTE_W)) | PTE_RSW;
-        *pte = ((*pte) & (~PTE_W)) | PTE_RSW;
+        *pte = PA2PTE(pa) | flags;
     }
 
     if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
@@ -333,6 +334,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
         goto err;
     }
     reference_bits[pa / (uint64)PGSIZE] += 1;
+    // 之后这里需要将reference count +1, 其他the kalloc of other cow will set the reference bit to 1
 //    if((mem = kalloc()) == 0)
 //      goto err;
 //    memmove(mem, (char*)pa, PGSIZE);
@@ -340,7 +342,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   return 0;
 
  err:
-  // uvmunmap(new, 0, i / PGSIZE, 1);
+  uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
 }
 
@@ -376,10 +378,13 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
         if (pa0 == 0) {
             return -1;
         }
+        uint flag = PTE_FLAGS(*pte);
+        flag = (flag & ~PTE_RSW) | PTE_W;
         memmove((void*)pa0, (void*)old_pa, PGSIZE);
-        mappages(pagetable, va0, PGSIZE, pa0, PTE_W|PTE_R|PTE_X|PTE_U);
-        reference_bits[pa0 / (uint64)PGSIZE] += 1;
-        *pte = *pte & (~PTE_RSW); // todo:
+        // mappages(pagetable, va0, PGSIZE, pa0, PTE_W|PTE_R|PTE_X|PTE_U);
+        // reference_bits[pa0 / (uint64)PGSIZE] += 1;
+        kfree((void*)old_pa);
+        *pte = PTE2PA(*pte) | flag; // todo:
     }
 //    if(pa0 == 0)
 //      return -1;

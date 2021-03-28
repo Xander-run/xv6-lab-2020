@@ -34,6 +34,7 @@ trapinithart(void)
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
 //
+// todo: 我草你妈的傻逼函数？、
 void
 usertrap(void)
 {
@@ -79,19 +80,20 @@ usertrap(void)
           goto done;
       }
 
-      if (addr <= PGROUNDDOWN(p->trapframe->sp)) {
+      if (addr <= PGROUNDDOWN(p->trapframe->sp) && addr >= PGROUNDDOWN(p->trapframe->sp) - PGSIZE) {
           printf("usertrap(): access illegal memory %p at guardpage, pid=%d\n", addr, p->pid);
           printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
           p->killed = 1;
           goto done;
       }
 
-      pte_t *old_pte;
-      old_pte = walk(p->pagetable, addr, 0);
-      uint64 old_pa = PTE2PA(*old_pte);
+      pte_t *pte;
+      pte = walk(p->pagetable, addr, 0);
+      uint flag = PTE_FLAGS(*pte);
+      uint64 old_pa = PTE2PA(*pte);
       if (reference_num(old_pa) == 1) {
           // only update the pte
-          *old_pte = ((*old_pte) & (~PTE_RSW)) | (PTE_W);
+          *pte = ((*pte) & (~PTE_RSW)) | (PTE_W);
           goto done;
       }
 
@@ -104,13 +106,14 @@ usertrap(void)
           goto done;
       }
 
-      pagetable_t old_pgt = p->pagetable;
+      // pagetable_t old_pgt = p->pagetable;
       memmove(new_pa, (char*)old_pa, PGSIZE);
-      mappages(old_pgt, addr, PGSIZE, (uint64)new_pa, PTE_W|PTE_R|PTE_X|PTE_U);
-      // todo: old reference -1
-      reference_bits[old_pa / (uint64)PGSIZE] -= 1;
-      // *old_pte = (*old_pte & (~PTE_RSW)) | (PTE_W);
-      *old_pte = (*old_pte) & (~PTE_RSW);
+      // mappages(old_pgt, addr, PGSIZE, (uint64)new_pa, PTE_W|PTE_R|PTE_X|PTE_U);
+      // reference -1, 这一步mappages的时候，原先页表中的内容是valid的，所以会报错remap
+      kfree((void*)old_pa); // decrease the reference count
+      // *pte = (*pte & (~PTE_RSW)) | (PTE_W);
+      flag = (flag & ~PTE_RSW) | PTE_W;
+      *pte = (PA2PTE(new_pa) & (~PTE_RSW)) | flag;
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {

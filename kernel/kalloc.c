@@ -14,7 +14,6 @@ void freerange(void *pa_start, void *pa_end);
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
 int reference_bits[PHYSTOP / PGSIZE];  // todo: set a lock here, deadlock issue
-struct spinlock reference_bit_lock;
 
 struct run {
   struct run *next;
@@ -25,11 +24,18 @@ struct {
   struct run *freelist;
 } kmem;
 
+void ref_bits_init() {
+    acquire(&kmem.lock);
+    for (int i = 0; i < PGROUNDUP(PHYSTOP) / PGSIZE; i++)
+        reference_bits[i] = 0;
+    release(&kmem.lock);
+}
+
 void
 kinit()
 {
+    ref_bits_init();
   initlock(&kmem.lock, "kmem");
-  initlock(&reference_bit_lock, "refer");
   freerange(end, (void*)PHYSTOP);
 }
 
